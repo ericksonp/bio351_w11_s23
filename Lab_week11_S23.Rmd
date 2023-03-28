@@ -1,0 +1,253 @@
+---
+title: "Bio 351 Week 11 S23"
+output: html_notebook
+---
+
+Today we are going to FINALLY calculate FST at individuals SNPs for your two focal populations to identify SNPs that may show interesting patterns of differentiation between the populations you've chosen to compare. Yay! As you've seen, it takes a lot of bioinformatics to get sequencing data to the point of being usable; part of hte goal of this lab is to appreciate all the work that went into the various papers we've read.
+
+First let's get the filtered vcf file that you made for just your two samples off of spydur and on to the Rstudio server. Below, you will need to change `netid` to your actual net id and `your_name_folder` to the name of your folder that you were working in on Spydur. If you didn't name your files in the same way as the instructions two weeks ago, we might need to do some digging together to find them but if your files are named as the lab indicated, they should copy correctly. 
+
+```{bash}
+export LD_LIBRARY_PATH=/usr/lib64:/usr/local/sw/anaconda3/lib:/usr/pgsql-13/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/sw/anaconda3/lib
+scp netid@spydur:~/shared_perickso/your_name_folder/Lab_8/subset_snps_no_repeats_filtered.recode.vcf ./
+scp netid@spydur:~/shared_perickso/your_name_folder/Lab_8/sample_names.txt ./
+scp netid@spydur:~/shared_perickso/zap_pool_info_W22_forclass.csv ./ 
+
+```
+We are going to need to tell our R package the names and pool sizes of our two samples. You can find the names in the `zap_pool_info_W22_forclass.csv` file that you just copied (it should be in your current folder, and you can look at this file by double clicking on it in the browser to the right). Then you will need to update the code below with the names of your two samples in the order they are present in the vcf file. You will also need to tell it the number of individuals in each pool. You can find the number of individuals from the information in the sample_info.csv file that should be present in last week's folder and update the numbers below. Working with this smaller vcf is going to speed things up relative to last week. So, the ZP_2, ZP_3, 42, and 46 below should be changed with your actual data.
+
+**Question** what are the names and total sample sizes of your two samples? 
+**Answer here**
+
+Now let's read our two-sample vcf file in to the `poolfstat` package. You are going to need to provide the names of the two samples and the number of individuals in each sample in the lines indicated below 
+
+```{r}
+library(poolfstat)
+library(data.table)
+library(ggplot2)
+info<-fread("zap_pool_info_W22_forclass.csv")
+vcf.dat<-vcf2pooldata(vcf.file="subset_snps_no_repeats_filtered.recode.vcf",
+                  poolnames=c("ZP_", "ZP_"), #replace with your sample names in the order they are in your vcf inside each set of quotation marks
+                  poolsizes=c(XX, XX), #replace the XX numbers with teh #of individuals in your pools, no quotes, leave the comma between them
+                  min.cov.per.pool=25) #leave this
+
+```
+First let's extract the information about the SNPs in your dataset from the `vcf.dat` object and save them as a table so it's easier to work with. The information about the SNPs is in a "slot" of `vcf.dat` and the way we access slots is with the `@` symbol.  
+
+```{r}
+snp.info<-as.data.table(vcf.dat@snp.info)
+snp.info
+```
+
+Now we are going to add in the information about the read counts for each sample, which are stored in separate parts of `vcf.dat` and need to be extracted. This package stores the reference read count and the TOTAL read count (not the alternate read depth). In the code below, change "sample1" and "sample2" to the names of your samples.
+
+
+```{r}
+snp.info[,sample1.RD:=vcf.dat@refallele.readcount[,1]]
+snp.info[,sample1.TD:=vcf.dat@readcoverage[,1]]
+snp.info[,sample2.RD:=vcf.dat@refallele.readcount[,2]]
+snp.info[,sample2.TD:=vcf.dat@readcoverage[,2]]
+
+snp.info
+
+```
+
+Now in your `sample.info` table, calculate two new columns with the reference allele frequencies for each sample. The way you add a column is to say `data.table.name[,.new.column.name:=cacluation]`. Name the columns "sample1.AF" and "sample2.AF" but change sample1 and sample2 to your sample names. We will refer back to these allele frequencies later on after we've gotten more information. You can look back at the previous code chunk for the syntax of how to generate a new column, and think about how to make the calculation to generate values for that column. 
+
+```{r}
+#create two new columns here by replacing new.col.name and new.col.calculation according to the directions above
+
+snp.info[,new.col.name:=new.col.calcuation]
+snp.info[,new.col.name2:=new.col.calculation2]
+#now print your new table to confirm that the new columns make sense
+
+snp.info
+```
+
+
+Last week we calculated all the pairwise FSTs between each possible population to get genome-wide average FST. This week we are going to focus on your two samples and look at patterns of FST at every snp across the genome so that we can make a Manhattan plot. First, let's calculate the SNP-level FST using a built-in function from the `poolfstat` package. The calculation takes into account the number of individuals as well as the read depth at each locus, so it's a bit more complicated than how we talked about FST in class. But, the idea is the same in that it uses the allele frequencies to compare expected heterozygosities between populations and look for SNPs that show high differentiation.
+
+```{r}
+fst<-computeFST(vcf.dat)
+names(fst)
+```
+
+Let's add these SNP-by-SNP results to our snp.info table, then filter so we only have the five main chromosomes of Z. indianus
+```{r}
+snp.info[,fst:=fst$snp.FST]
+snp.info<-snp.info[Chromosome%in%c("Scaffold_1", "Scaffold_2", "Scaffold_3", "Scaffold_4", "Scaffold_5")]
+snp.info
+```
+
+You can get a general sense of the spread of FST values using a histogram. What should be on the x axis to make a histogram of FST values? Fill it in below.
+
+```{r}
+ggplot(snp.info)+geom_histogram(aes(x= variable.to.plot )) 
+```
+**Question** Describe the distribution of FST values. What are the most common values and what are the most extreme values? Note that `ggplot` automatically scales the x-axis to the spread of your data, so even if you can't see histogram bars at a value, there are some there, it is just a relatively small number of SNPs. 
+**Answer here**
+
+**Question** If you wanted to have a cutoff for what you counted as a "high" FST SNP in the dataset, what number might you choose?
+**Answer here**
+
+
+There are many fancy ways to test for "significant" FST that involve computer modeling and simulations that are way beyond the scope of this course. However, one way to identify SNPs that are outliers is to identify a cutoff via a ranking of the data from smallest to largest. Then, for example, we could examine SNPs that have FSTs in the top 99.99% of all SNPs. To find that cutoff, you can use the `quantile()` function in R. snp.info$fst refers to the fst column of the snp.info data table, and the 0.9999 refers to the proporition of data we want to look at. 
+
+```{r}
+threshold<-quantile(snp.info$fst, 0.9999, na.rm=T)
+threshold
+```
+
+**Question** In your own words, explain what the threshold you just calculated means
+**Answer here**
+
+In order to make the FST Manhattan plot, we need to make a single number that will index the positions along the genome from 1 to however many SNPs you have. This will serve as the x axis of your graph.
+
+**Question** Why can't we just use the "position" column as our x axis? Hint: think about how the position column works across multiple chromosomes. If there is a position 1 on every chromosome, what will happen to your graph if you use position as the x axis? 
+**Answer here** 
+
+Use the code below to make a new column called `index` that counts up from 1 to the total number of SNPs.The code is completed for you.
+
+```{r}
+snp.info[,index:=c(1:nrow(snp.info))]
+```
+
+If we plot every single SNP, we will have a plot with > 5,000,00 points, which will take a long time to generate and slow everything down. Instead, we can simply plot the SNPs with higher values of FST, since those are the ones most likely to be of interest to us. Below, work out the conditional statement  that will create a new R object called `data.to.plot` to isolate only SNPs with an FST of above 0.1. Update the `conditional.statement.here` with a conditional that will isolate rows with FST over 0.1. 
+
+```{r}
+#create a new R object here
+data.to.plot<-snp.info[conditional.statement.here] #replace with conditional.statement.her
+  
+
+```
+
+**Question** How many rows are in your reduced data object?
+**Answer here**
+
+Now let's make the plot. You have examples of lots of plots from previous work, which you can find from navigating through your old files in the files window to the right. What goes on the x and y axis? How have you seen Manhattan plots color coded before? Then add information to give the x and y axis appropriate labels. The `+ geom_hline(yintercept=threshold)` will add a horizontal "significance line". 
+
+This plot is going to go into your final lab presentation, so make sure it looks right and is properly labeled.
+
+```{r}
+ggplot(data.to.plot)+geom_point(aes(x=  , 
+                        y=  , 
+                        color= )) + #how are chromosomes 
+    labs(x=" ", y=" ")+ #what should you label the X and y axes? Add labels inside the quotes 
+    geom_hline(yintercept=threshold, linetype="dashed") #leave this line untouched
+```
+**Question** Do you notice any locations in the genome that stand out? 
+**Answer here**
+
+**Question** Are regions of high FST restricted to one chromosome or distributed throughout the genome? 
+**Answer here**
+
+Now, let's make two tables to use next week. The fisrst will be a table of the highest-FST SNP for each chromosome. The second will be a table of the 10 highest FST SNPs in the whole genome. 
+```{r}
+#top values per chromosome
+max.fst.snp<-data.to.plot[,.(max.fst=max(fst), Position=Position[fst==max(fst)]), .(Chromosome)]
+max.fst.snp<-merge(max.fst.snp, snp.info, by=c("Chromosome", "Position"))
+max.fst.snp
+
+
+```
+**Question** Overall, how different are the allele frequencies for the peak SNPs on each chromosome? Do they seem like meaningful differences?
+**Answer here** 
+
+Now make the table of the top 10 SNPs
+```{r}
+top.ten.snps<-data.to.plot[order(-fst)][1:10]
+top.ten.snps
+```
+**Question** Are the top 10 SNPs close to one another or distributed?
+**Answer here**
+
+Sometimes individual SNPs can look a bit messy, but computing an average across a sliding window can help to smooth out the results and bring attention to genome regions that are most different across more than one SNP. 
+
+**Question** Explain what is meant by a "50-SNP sliding window"
+**Answer here**
+
+
+`poolfstat` has a sliding window function built in that will average across a certain number of SNPs.  The first line of code makes an object called `sliding.window.50` which is a list of multiple additional R objects, including a dataframe with our important windowed FST results in it. We can extract this value using the `$` and turn it into a data.table called `sw.results` for further manipulation
+
+```{r}
+#calculate sliding window FST
+sliding.window.50<-computeFST(vcf.dat,sliding.window.size=50)
+#extract FST results and save as a data table
+sw.results<-as.data.table(sliding.window.50$sliding.windows.fst)
+#extract just chromosomes 1-5 from the data
+sw.results<-sw.results[Chr%in%c("Scaffold_1", "Scaffold_2", "Scaffold_3", "Scaffold_4", "Scaffold_5")]
+```
+
+Now take a look at the sw.results data table to orient yourself to the new dataset:
+
+**Question** How is this data table different from our previous data table
+**Answer here**
+
+**Question** How do you think CumulatedPosition is different from position? Hint: consider what will happen when you move from chromosome 1 to chromosome 2. 
+
+Use the code you learned above to calculate the 99.99% quantile for your sliding window FST
+```{r}
+sw.threshold<-quantile(complete.code.here)
+sw.threshold
+```
+**Question** How did the threshold for top SNPs change when comparing the invididual SNP data to the sliding window?
+**Answer here**
+
+ Now see plot these results as a manhattan plot. The relevant columns have different names than the previous data we worked with. Make sure you plot the correct dataset!
+
+```{r}
+ggplot( )+geom_point(aes(x=, #clear
+                                 y=, #clear
+                                 color=))+ # clear
+  geom_hline(yintercept=, linetype="dashed") 
+```
+
+**Question** How does the sliding window compare to the single-SNP calculations? Are there more or fewer peaks? Is the pattern similar? Why or why not? 
+**Answer here**
+
+Now, see what happens when you vary the sliding window size. Repeat the calculations and graphing from above to try out a new window size. One partner should make the window bigger (more SNPs) and the other one make it smaller (fewer SNPs) so that you can compare the results.
+
+```{r}
+#first calculate fst with new window size. make sure you have a new name for the output so you don't overwrite your previous results
+#calculate sliding window FST
+sliding.window.new<- #add sliding window command here
+#extract FST reults
+sw.results.new<- #extract fst values here 
+#pull out just chromosomes 1-5
+sw.results.new<-sw.results.new[Chr%in%c("Scaffold_1", "Scaffold_2", "Scaffold_3", "Scaffold_4", "Scaffold_5")]
+  
+#now copy the code from your previous plot and  plot your new results by updating the dataset. Leave the threshold line the same as it was before to make it easier to compare the two graphs. This plot should look different than your last plot!
+
+ggplot()
+
+```
+
+**Question** did changing the window size change your perception of the results?
+**Answer here**
+
+Now let's identify where the sliding window peaks were identified using the  50-SNP window size. We can use the `order()` function to sort a data frame by the values in a particular column. The `decreasing = T` tells R to sort from highest to lowest
+
+```{r}
+sw.results[MultiLocusFst<Inf][order(MultiLocusFst, decreasing=T)]
+```
+
+**Question** Are most of the highest FST locations in the genome nearby one another or scattered throughout the genome?
+**Answer here**
+
+We can also calculate the highest FST window on each chromosome like we did above for the individual SNPs. We'll use this information next week.
+
+```{r}
+
+max.fst<-sw.results[MultiLocusFst<Inf,.(max.window.fst=max(MultiLocusFst), window.pos=Position[MultiLocusFst==max(MultiLocusFst)]), .(Chr)]
+max.fst
+```
+
+*Final question**
+For one of your two Manhattan plots (you choose which one), write a figure legend that accurately describes the data. We will not write the results yet because we need more information, which we will gather next week. Remember that a figure legend needs to provide a *title* and enough information for the data to stand on its own. That information should include the species, what/how the samples were collected, how the data were processed, what calculations were performed, etc. 
+
+*Figure legend here**
+
+Today we've used the poolfstat package to calculate FST at individual SNPs and in sliding windows. Next week, in our final lab of the semester (!), we'll investigate the genome annotation for Z. indianus and use a Drosophila genome database to find out if there are any interesting candidate genes near these peaks. 
+
+When you are done, click "Preview" --> Knit to html It's going to take a few minutes as it re-runs all the code. Then view the HTML in a browser, save as a  PDF to your computer and upload to Blackboard.
